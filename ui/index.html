@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MDView</title>
+<link rel="stylesheet" href="vendor/github-markdown-light.css" id="css-md-light">
+<link rel="stylesheet" href="vendor/github-markdown-dark.css" id="css-md-dark" disabled>
+<link rel="stylesheet" href="vendor/github.min.css" id="css-hl-light">
+<link rel="stylesheet" href="vendor/github-dark.min.css" id="css-hl-dark" disabled>
+<style>
+  :root {
+    --bg: #ffffff; --bg2: #f6f8fa; --border: #d1d9e0;
+    --fg: #1f2328; --fg-muted: #59636e; --accent: #0969da;
+  }
+  html[data-theme="dark"] {
+    --bg: #0d1117; --bg2: #151b23; --border: #3d444d;
+    --fg: #f0f6fc; --fg-muted: #9198a1; --accent: #4493f8;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  /* ── Toolbar ── */
+  #toolbar {
+    display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+    background: var(--bg2); border-bottom: 1px solid var(--border);
+    flex-shrink: 0; user-select: none;
+  }
+  #toolbar button {
+    background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 12px; font-size: 13px; cursor: pointer;
+  }
+  #toolbar button:hover { border-color: var(--accent); color: var(--accent); }
+  #filename {
+    flex: 1; text-align: center; font-size: 13px; color: var(--fg-muted);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* ── Layout ── */
+  #main { display: flex; flex: 1; overflow: hidden; }
+  #toc {
+    width: 240px; flex-shrink: 0; overflow-y: auto; padding: 16px 8px;
+    background: var(--bg2); border-right: 1px solid var(--border);
+    font-size: 13px;
+  }
+  #toc.hidden { display: none; }
+  #toc a {
+    display: block; color: var(--fg-muted); text-decoration: none;
+    padding: 3px 8px; border-radius: 4px; border-left: 2px solid transparent;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #toc a:hover { color: var(--accent); background: var(--bg); }
+  #toc a.active { color: var(--accent); border-left-color: var(--accent); }
+  #toc .lvl2 { padding-left: 20px; }
+  #toc .lvl3 { padding-left: 34px; }
+  #toc .lvl4 { padding-left: 48px; }
+  #toc-title {
+    font-weight: 600; font-size: 11px; text-transform: uppercase;
+    letter-spacing: .05em; color: var(--fg-muted); padding: 0 8px 8px;
+  }
+
+  #content { flex: 1; overflow-y: auto; scroll-behavior: smooth; }
+  .markdown-body {
+    max-width: 860px; margin: 0 auto; padding: 32px 40px 80px;
+    background: transparent !important;
+  }
+
+  /* ── Welcome screen ── */
+  #welcome {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 12px; color: var(--fg-muted);
+  }
+  #welcome .big { font-size: 44px; }
+  #welcome h2 { color: var(--fg); margin: 0; font-weight: 600; }
+  #welcome button {
+    background: var(--accent); color: #fff; border: none; border-radius: 6px;
+    padding: 9px 20px; font-size: 14px; cursor: pointer; margin-top: 6px;
+  }
+
+  /* ── Drag overlay ── */
+  #drop-overlay {
+    position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    border: 3px dashed var(--accent); z-index: 99;
+    font-size: 22px; color: var(--accent); font-weight: 600; pointer-events: none;
+  }
+  body.dragging #drop-overlay { display: flex; }
+
+  input[type="file"] { display: none; }
+
+  /* ── Print ── */
+  @media print {
+    #toolbar, #toc, #drop-overlay { display: none !important; }
+    #main, #content { overflow: visible; display: block; }
+    body { overflow: visible; height: auto; }
+    .markdown-body { max-width: none; padding: 0; }
+  }
+</style>
+</head>
+<body>
+  <div id="toolbar">
+    <button id="btn-open" title="Open a markdown file (Ctrl+O)">📂 Open</button>
+    <button id="btn-toc" title="Toggle table of contents">☰ Contents</button>
+    <span id="filename">No file open</span>
+    <button id="btn-reload" title="Reload file (F5)" disabled>⟳ Reload</button>
+    <button id="btn-print" title="Print / Save as PDF (Ctrl+P)" disabled>🖨 Print / PDF</button>
+    <button id="btn-theme" title="Toggle dark/light theme">🌙</button>
+  </div>
+
+  <div id="main">
+    <nav id="toc" class="hidden"><div id="toc-title">Contents</div><div id="toc-list"></div></nav>
+    <div id="content">
+      <div id="welcome">
+        <div class="big">📄</div>
+        <h2>MDView</h2>
+        <p>Drop a markdown file here, or</p>
+        <button onclick="document.getElementById('file-input').click()">Open a file…</button>
+      </div>
+      <article class="markdown-body" id="viewer" style="display:none"></article>
+    </div>
+  </div>
+
+  <div id="drop-overlay">Drop to open</div>
+  <input type="file" id="file-input" accept=".md,.markdown,.mdown,.mkd,.txt">
+
+<script src="vendor/md-libs.min.js"></script>
+<script>
+(function () {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const viewer = $("viewer"), welcome = $("welcome"), toc = $("toc"),
+        tocList = $("toc-list"), content = $("content"), fileLabel = $("filename");
+  const tauri = window.__TAURI__ || null;
+  let currentPath = null; // real disk path (only known via Tauri)
+  let tocVisible = false;
+
+  /* ── Theme ── */
+  function applyTheme(t) {
+    document.documentElement.setAttribute("data-theme", t);
+    $("css-md-light").disabled = $("css-hl-light").disabled = (t === "dark");
+    $("css-md-dark").disabled = $("css-hl-dark").disabled = (t !== "dark");
+    $("btn-theme").textContent = t === "dark" ? "☀️" : "🌙";
+    try { localStorage.setItem("mdview-theme", t); } catch (e) {}
+  }
+  applyTheme((function () {
+    try { const s = localStorage.getItem("mdview-theme"); if (s) return s; } catch (e) {}
+    return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  })());
+  $("btn-theme").onclick = () =>
+    applyTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark");
+
+  /* ── Rendering ── */
+  marked.setOptions({ gfm: true, breaks: false });
+
+  function render(name, text, path) {
+    currentPath = path || null;
+    viewer.innerHTML = marked.parse(text);
+    welcome.style.display = "none";
+    viewer.style.display = "block";
+    fileLabel.textContent = path || name;
+    fileLabel.title = path || name;
+    $("btn-print").disabled = false;
+    $("btn-reload").disabled = !currentPath;
+    document.title = name + " — MDView";
+    if (tauri) tauri.window.getCurrentWindow().setTitle(name + " — MDView").catch(() => {});
+
+    viewer.querySelectorAll("pre code").forEach((el) => hljs.highlightElement(el));
+    buildToc();
+    content.scrollTop = 0;
+  }
+
+  function buildToc() {
+    tocList.innerHTML = "";
+    const heads = viewer.querySelectorAll("h1, h2, h3, h4");
+    const used = {};
+    heads.forEach((h) => {
+      let id = h.textContent.trim().toLowerCase().replace(/[^\w]+/g, "-").replace(/^-+|-+$/g, "") || "section";
+      if (used[id]) id += "-" + (++used[id]); else used[id] = 1;
+      h.id = id;
+      const a = document.createElement("a");
+      a.href = "#" + id;
+      a.textContent = h.textContent;
+      a.className = "lvl" + h.tagName[1];
+      a.onclick = (e) => {
+        e.preventDefault();
+        h.scrollIntoView({ behavior: "smooth", block: "start" });
+        tocList.querySelectorAll("a").forEach((x) => x.classList.remove("active"));
+        a.classList.add("active");
+      };
+      tocList.appendChild(a);
+    });
+    if (heads.length && tocVisible) toc.classList.remove("hidden");
+  }
+
+  $("btn-toc").onclick = () => {
+    tocVisible = !tocVisible;
+    toc.classList.toggle("hidden", !tocVisible);
+  };
+
+  /* ── Opening files ── */
+  function openFileObject(file) {
+    const reader = new FileReader();
+    reader.onload = () => render(file.name, reader.result, file.path || null);
+    reader.readAsText(file);
+  }
+
+  $("file-input").onchange = (e) => { if (e.target.files[0]) openFileObject(e.target.files[0]); e.target.value = ""; };
+  $("btn-open").onclick = () => $("file-input").click();
+
+  $("btn-reload").onclick = async () => {
+    if (!currentPath || !tauri) return;
+    try {
+      const text = await tauri.core.invoke("read_md", { path: currentPath });
+      const name = currentPath.split(/[\\/]/).pop();
+      render(name, text, currentPath);
+    } catch (err) { alert("Could not reload file: " + err); }
+  };
+
+  $("btn-print").onclick = () => window.print();
+
+  /* ── Drag & drop (HTML5 — dragDropEnabled is false in tauri.conf.json) ── */
+  let dragDepth = 0;
+  document.addEventListener("dragenter", (e) => { e.preventDefault(); dragDepth++; document.body.classList.add("dragging"); });
+  document.addEventListener("dragleave", (e) => { e.preventDefault(); if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove("dragging"); } });
+  document.addEventListener("dragover", (e) => e.preventDefault());
+  document.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dragDepth = 0;
+    document.body.classList.remove("dragging");
+    const f = e.dataTransfer.files[0];
+    if (f) openFileObject(f);
+  });
+
+  /* ── Keyboard shortcuts ── */
+  document.addEventListener("keydown", (e) => {
+    if (e.ctrlKey && e.key === "o") { e.preventDefault(); $("file-input").click(); }
+    if (e.ctrlKey && e.key === "p") { e.preventDefault(); if (!$("btn-print").disabled) window.print(); }
+    if (e.key === "F5") { e.preventDefault(); $("btn-reload").click(); }
+  });
+
+  /* ── File opened via double-click / "Open with" (CLI arg) ── */
+  if (tauri) {
+    tauri.core.invoke("get_cli_file").then((res) => {
+      if (res) {
+        const [path, text] = res;
+        render(path.split(/[\\/]/).pop(), text, path);
+      }
+    }).catch(() => {});
+  }
+})();
+</script>
+</body>
+</html>
